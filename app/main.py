@@ -37,14 +37,9 @@ app.include_router(branches.router)
 app.include_router(websockets.router)
 
 @app.on_event("startup")
-async def startup_event():
-    # Create database tables
+def startup_event():
     create_tables()
-    
-    # Initialize cache
-    await CacheService.setup_cache()
-    
-    logging.info("Application started")
+    # Rest of your startup code
 
 @app.on_event("shutdown")
 async def shutdown_event():

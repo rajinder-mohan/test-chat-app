@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from typing import List
 
-from app.models.models import ChatCreate, ChatResponse, ChatUpdate, User, ChatContent
+from app.models.models import ChatCreate, ChatResponse, ChatUpdate, User, QAPair
 from app.dal.chat_dal import ChatDAL
 from app.utils.security import get_current_active_user
-from app.db.connection import get_db, get_mongodb_db
+from app.db.connection import get_db
 from app.config import settings
 from app.services.cache_service import CacheService
 
@@ -18,11 +18,10 @@ router = APIRouter(
 async def create_chat(
     chat: ChatCreate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Create a new chat."""
-    chat_dal = ChatDAL(db, mongodb)
+    chat_dal = ChatDAL(db)
     db_chat = await chat_dal.create_chat(chat, current_user.id)
     return db_chat
 
@@ -31,7 +30,7 @@ async def create_chat(
 async def get_chat(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Get chat details."""
     chat_dal = ChatDAL(db)
@@ -45,21 +44,20 @@ async def get_chat(
     
     return chat
 
-@router.get("/get-chat-content", response_model=ChatContent)
+@router.get("/get-chat-content", response_model=List[QAPair])
 async def get_chat_content(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Get chat content including messages."""
-    chat_dal = ChatDAL(db, mongodb)
+    chat_dal = ChatDAL(db)
     content = await chat_dal.get_chat_content(chat_id, current_user.id)
     
-    if not content:
+    if content is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chat content not found"
+            detail="Chat content not found or you don't have permission"
         )
     
     return content
@@ -69,7 +67,7 @@ async def update_chat(
     chat_id: str,
     chat_update: ChatUpdate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Update chat metadata."""
     chat_dal = ChatDAL(db)
@@ -87,7 +85,7 @@ async def update_chat(
 async def delete_chat(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Delete a chat."""
     chat_dal = ChatDAL(db)
@@ -104,7 +102,7 @@ async def delete_chat(
 @router.get("/list-chats", response_model=List[ChatResponse])
 async def list_chats(
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Get all active chats for the current user."""
     chat_dal = ChatDAL(db)

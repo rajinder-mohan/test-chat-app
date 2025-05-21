@@ -1,22 +1,18 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import update, delete
+from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
 
-from app.db.db import Chat, Conversation
-from app.models.models import ChatCreate, ChatUpdate, ChatContent
-from app.constants import ChatType, ErrorMessages
+from app.db.db import Chat, Conversation, Message
+from app.models.models import ChatCreate, ChatUpdate, QAPair
 
 class ChatDAL:
-    def __init__(self, db_session: AsyncSession, mongodb_session=None):
+    def __init__(self, db_session: Session):
         self.db_session = db_session
-        self.mongodb_session = mongodb_session
         
     async def create_chat(self, chat: ChatCreate, account_id: str) -> Chat:
         """Create a new chat."""
         db_chat = Chat(
-            chat_id=str(uuid.uuid4()),
+            id=str(uuid.uuid4()),
             account_id=account_id,
             chat_type=chat.chat_type,
             name=chat.name
@@ -24,28 +20,26 @@ class ChatDAL:
         
         # Create the main conversation for this chat
         db_conversation = Conversation(
-            chat_id=db_chat.chat_id,
+            id=str(uuid.uuid4()),
+            chat_id=db_chat.id,
             account_id=account_id,
             name=chat.name
         )
         
         self.db_session.add(db_chat)
         self.db_session.add(db_conversation)
-        await self.db_session.commit()
-        await self.db_session.refresh(db_chat)
+        self.db_session.commit()
+        self.db_session.refresh(db_chat)
         
-        # Initialize chat content in MongoDB
-        if self.mongodb_session:
-            chat_content = ChatContent(chat_id=db_chat.chat_id, qa_pairs=[])
-            await self.mongodb_session.chat_content.insert_one(chat_content.dict())
-            
         return db_chat
     
     async def get_chat(self, chat_id: str, account_id: str) -> Optional[Chat]:
         """Get a chat by ID."""
-        query = select(Chat).where(Chat.chat_id == chat_id, Chat.account_id == account_id)
-        result = await self.db_session.execute(query)
-        return result.scalars().first()
+        chat = self.db_session.query(Chat).filter(
+            Chat.id == chat_id, 
+            Chat.account_id == account_id
+        ).first()
+        return chat
     
     async def update_chat(self, chat_id: str, chat_update: ChatUpdate, account_id: str) -> Optional[Chat]:
         """Update an existing chat."""
@@ -93,17 +87,31 @@ class ChatDAL:
         result = await self.db_session.execute(query)
         return result.scalars().all()
     
-    async def get_chat_content(self, chat_id: str, account_id: str) -> Optional[ChatContent]:
-        """Get chat content from MongoDB."""
-        if not self.mongodb_session:
-            return None
-            
+    async def get_chat_content(self, chat_id: str, account_id: str) -> Optional[List[QAPair]]:
+        """Get chat content from database."""
         # First check if user has access to this chat
         chat = await self.get_chat(chat_id, account_id)
         if not chat:
             return None
             
-        content = await self.mongodb_session.chat_content.find_one({"chat_id": chat_id})
-        if content:
-            return ChatContent(**content)
-        return None 
+        # Get all messages for this chat
+        messages = self.db_session.query(Message).filter(
+            Message.chat_id == chat_id
+        ).order_by(Message.timestamp).all()
+        
+        if not messages:
+            return []
+            
+        # Convert to QAPair format
+        qa_pairs = [
+            QAPair(
+                question=message.question,
+                response=message.response,
+                response_id=message.response_id,
+                timestamp=message.timestamp,
+                branches=message.branches
+            )
+            for message in messages
+        ]
+        
+        return qa_pairs 

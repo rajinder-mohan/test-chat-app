@@ -7,7 +7,7 @@ from app.models.models import MessageCreate, User
 from app.dal.message_dal import MessageDAL
 from app.utils.security import get_password_hash, verify_password
 from app.services.auth_service import AuthService
-from app.db.connection import get_db, get_mongodb_db
+from app.db.connection import get_db
 from app.config import settings
 
 router = APIRouter(tags=["websockets"])
@@ -63,14 +63,13 @@ async def websocket_endpoint(
         await manager.connect(websocket, chat_id)
         
         try:
+            # Get database session
+            db = next(get_db())  # Sync database session
+            
             while True:
                 # Receive message from WebSocket
                 data = await websocket.receive_text()
                 message_data = json.loads(data)
-                
-                # Get necessary sessions
-                db = next(get_db())
-                mongodb = await get_mongodb_db()
                 
                 # Create message in database
                 message = MessageCreate(
@@ -79,8 +78,8 @@ async def websocket_endpoint(
                     message_type=message_data.get("message_type", "text")
                 )
                 
-                message_dal = MessageDAL(db, mongodb)
-                saved_message = await message_dal.add_message(message, payload.get("user_id"))
+                message_dal = MessageDAL(db)
+                saved_message = await message_dal.add_message(chat_id, message, payload.get("user_id"))
                 
                 # Broadcast to all connected clients
                 await manager.broadcast(
@@ -91,13 +90,11 @@ async def websocket_endpoint(
                             "question": saved_message.question,
                             "response": saved_message.response,
                             "response_id": saved_message.response_id,
-                            "timestamp": saved_message.timestamp.isoformat()
+                            "timestamp": saved_message.timestamp.isoformat(),
+                            "branches": saved_message.branches
                         }
                     }
                 )
-                
-                # Free resources
-                await db.close()
                 
         except WebSocketDisconnect:
             manager.disconnect(websocket, chat_id)

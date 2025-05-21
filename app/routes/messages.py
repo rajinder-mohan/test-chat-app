@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from typing import List
 
 from app.models.models import MessageCreate, QAPair, User
 from app.dal.message_dal import MessageDAL
 from app.dal.chat_dal import ChatDAL
 from app.utils.security import get_current_active_user
-from app.db.connection import get_db, get_mongodb_db
+from app.db.connection import get_db
 from app.config import settings
 
 router = APIRouter(
@@ -18,8 +18,7 @@ router = APIRouter(
 async def add_message(
     message: MessageCreate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Add a message to a chat."""
     # First verify user has access to the chat
@@ -32,8 +31,8 @@ async def add_message(
             detail="Chat not found or you don't have permission to add messages"
         )
     
-    message_dal = MessageDAL(db, mongodb)
-    message_result = await message_dal.add_message(message, current_user.id)
+    message_dal = MessageDAL(db)
+    message_result = await message_dal.add_message(message.chat_id, message, current_user.id)
     
     if not message_result:
         raise HTTPException(
@@ -47,8 +46,7 @@ async def add_message(
 async def get_messages(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Get all messages for a chat."""
     # First verify user has access to the chat
@@ -61,7 +59,7 @@ async def get_messages(
             detail="Chat not found or you don't have permission to view messages"
         )
     
-    message_dal = MessageDAL(db, mongodb)
+    message_dal = MessageDAL(db)
     messages = await message_dal.get_chat_messages(chat_id)
     
     return messages
@@ -71,8 +69,7 @@ async def search_messages(
     chat_id: str,
     query: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Search for messages in a chat."""
     # First verify user has access to the chat
@@ -85,7 +82,7 @@ async def search_messages(
             detail="Chat not found or you don't have permission"
         )
     
-    message_dal = MessageDAL(db, mongodb)
+    message_dal = MessageDAL(db)
     messages = await message_dal.search_messages(chat_id, query)
     
     return messages 

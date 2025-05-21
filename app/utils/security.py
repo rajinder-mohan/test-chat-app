@@ -5,9 +5,13 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import ValidationError
 from typing import Optional
+from sqlalchemy.orm import Session
+import uuid
 
 from app.config import settings
-from app.models.models import TokenData, User
+from app.models.models import TokenData, User as UserSchema
+from app.db.db import User as UserModel
+from app.db.connection import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
@@ -30,36 +34,29 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
-    except (JWTError, ValidationError):
+    except JWTError:
         raise credentials_exception
-        
-    # In a real application, you'd look up the user in your database
-    # For this example, we're creating a mock user
-    user = User(
-        id=payload.get("user_id", "mock_id"),
-        username=token_data.username,
-        email=f"{token_data.username}@example.com",
-        is_active=True
-    )
     
+    # Use UserModel for database query
+    user = db.query(UserModel).filter(UserModel.username == username).first()
     if user is None:
         raise credentials_exception
+    
+    # Convert from SQLAlchemy model to Pydantic model if needed
     return user
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
+async def get_current_active_user(current_user: UserModel = Depends(get_current_user)):
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user 

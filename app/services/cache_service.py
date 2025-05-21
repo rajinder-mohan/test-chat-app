@@ -1,7 +1,7 @@
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.decorator import cache
-import aioredis
+from redis.asyncio import Redis
 from typing import Optional, Any
 import hashlib
 import json
@@ -9,11 +9,14 @@ import json
 from app.config import settings
 
 class CacheService:
+    def __init__(self, redis_url: str):
+        self.redis = Redis.from_url(redis_url, decode_responses=True)
+    
     @staticmethod
     async def setup_cache():
         """Initialize cache when application starts."""
         if settings.REDIS_URL:
-            redis = aioredis.from_url(settings.REDIS_URL, encoding="utf8", decode_responses=True)
+            redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
             FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
     
     @staticmethod

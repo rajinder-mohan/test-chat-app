@@ -23,9 +23,15 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: str
     is_active: bool
+    created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class UserResponse(User):
+    """User data returned in responses."""
+    class Config:
+        from_attributes = True
 
 # Chat models
 class ChatBase(BaseModel):
@@ -40,14 +46,14 @@ class ChatUpdate(BaseModel):
     active: Optional[bool] = None
 
 class ChatResponse(ChatBase):
-    chat_id: str
+    id: str
+    name: str
+    chat_type: str
     account_id: str
     created_at: datetime
-    updated_at: datetime
-    active: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Conversation models
 class ConversationBase(BaseModel):
@@ -65,7 +71,7 @@ class ConversationResponse(ConversationBase):
     parent_message_id: Optional[str] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Message models
 class MessageBase(BaseModel):
@@ -83,7 +89,7 @@ class MessageResponse(MessageBase):
     branches: List[str] = []
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Branch models
 class BranchCreate(BaseModel):
@@ -99,15 +105,18 @@ class BranchResponse(BaseModel):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # MongoDB chat content model
 class QAPair(BaseModel):
-    question: str
-    response: str
-    response_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    question: Optional[str] = None
+    response: Optional[str] = None
+    response_id: str
+    timestamp: datetime
     branches: List[str] = []
+    
+    class Config:
+        from_attributes = True
 
 class ChatContent(BaseModel):
     chat_id: str

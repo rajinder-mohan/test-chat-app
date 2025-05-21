@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from typing import List, Dict
 
-from app.models.models import BranchCreate, ChatResponse, User, Conversation
+from app.models.models import BranchCreate, ChatResponse, User
 from app.dal.branch_dal import BranchDAL
-from app.dal.chat_dal import ChatDAL
 from app.utils.security import get_current_active_user
-from app.db.connection import get_db, get_mongodb_db
+from app.db.connection import get_db
 from app.config import settings
 
 router = APIRouter(
@@ -14,15 +13,14 @@ router = APIRouter(
     tags=["branches"]
 )
 
-@router.post("/create-branch", response_model=ChatResponse)
+@router.post("/create", response_model=ChatResponse)
 async def create_branch(
     branch: BranchCreate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Create a new branch from a specific message in a chat."""
-    branch_dal = BranchDAL(db, mongodb)
+    branch_dal = BranchDAL(db)
     db_branch = await branch_dal.create_branch(branch, current_user.id)
     
     if not db_branch:
@@ -37,11 +35,10 @@ async def create_branch(
 async def get_branches(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Get all direct branches for a chat."""
-    branch_dal = BranchDAL(db, mongodb)
+    branch_dal = BranchDAL(db)
     branches = await branch_dal.get_branches(chat_id, current_user.id)
     
     # Convert ORM objects to dict for response
@@ -65,11 +62,10 @@ async def get_branches(
 async def get_branch_tree(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    mongodb = Depends(get_mongodb_db)
+    db: Session = Depends(get_db)
 ):
     """Get the complete tree of all branches for a chat."""
-    branch_dal = BranchDAL(db, mongodb)
+    branch_dal = BranchDAL(db)
     tree = await branch_dal.get_branch_tree(chat_id, current_user.id)
     
     return tree
@@ -79,7 +75,7 @@ async def set_active_branch(
     chat_id: str,
     branch_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Set a specific branch as the active branch for a chat.
     
