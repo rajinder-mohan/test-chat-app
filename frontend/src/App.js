@@ -5,12 +5,14 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 // Components
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
-import ChatList from './components/Chat/ChatList';
-import ChatWindow from './components/Chat/ChatWindow';
-import Header from './components/Layout/Header';
 
 // Styles
 import './styles.css';
+
+// Temporary placeholder components
+const ChatList = () => <div>Chat List Component</div>;
+const ChatWindow = () => <div>Chat Window Component</div>;
+const Header = () => <header><div className="header-container">Chat App</div></header>;
 
 // Protected route component
 const ProtectedRoute = ({ children }) => {
@@ -62,4 +64,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;
