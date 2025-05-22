@@ -1,16 +1,16 @@
-from fastapi import FastAPI, Depends
-from fastapi.middleware.cors import CORSMiddleware
-import logging
 from datetime import timedelta
+import logging
+import uvicorn
 
-from app.config import settings
-from app.routes import auth, chats, messages, branches, websockets
-from app.services.cache_service import CacheService
-from app.db.db import create_tables
-
-# Import FastAPICache
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
+
+from app.config import settings
+from app.db.db import create_tables
+from app.routes import auth, branches, chats, messages, websockets
+from app.services.cache_service import CacheService
 
 # Configure logging
 logging.basicConfig(
@@ -41,31 +41,35 @@ app.include_router(messages.router)
 app.include_router(branches.router)
 app.include_router(websockets.router)
 
+
 @app.on_event("startup")
 def startup_event():
     create_tables()
-    
+
     # Initialize FastAPICache
     FastAPICache.init(
         InMemoryBackend(),
         prefix="fastapi-cache",
         expire=timedelta(minutes=5),
     )
-    
+
     # Rest of your startup code
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logging.info("Application shutting down")
 
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Chat API with Branching"}
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
+
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True) 

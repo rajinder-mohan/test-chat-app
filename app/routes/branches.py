@@ -1,13 +1,14 @@
-from app.dal.chat_dal import ChatDAL
+from typing import Dict, List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Dict
 
-from app.models.models import BranchCreate, ChatResponse, User
-from app.dal.branch_dal import BranchDAL
-from app.utils.security import get_current_active_user
-from app.db.connection import get_db
 from app.config import settings
+from app.dal.branch_dal import BranchDAL
+from app.dal.chat_dal import ChatDAL
+from app.db.connection import get_db
+from app.models.models import BranchCreate, ChatResponse, User
+from app.utils.security import get_current_active_user
 
 router = APIRouter(
     prefix="/api/v1/branches",
