@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # Redis settings (if needed)
     REDIS_URL: str = "redis://localhost:6379/0"
     
+    # Groq API settings
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "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")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

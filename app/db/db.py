@@ -54,9 +54,11 @@ class Chat(Base):
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
-    chat_type = Column(String, nullable=False)  # Using String instead of Enum for simplicity
+    chat_type = Column(String, nullable=False)
     account_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    active = Column(Boolean, default=True)
     
     # Relationships
     owner = relationship("User", back_populates="chats")
@@ -73,6 +75,7 @@ class Conversation(Base):
     parent_chat_id = Column(String(36), nullable=True)
     parent_message_id = Column(String(36), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+    deleted = Column(Boolean, default=False)
     
     # Relationships
     chat = relationship("Chat", back_populates="conversations")
@@ -89,8 +92,14 @@ class Message(Base):
     response_id = Column(String(36), default=lambda: str(uuid.uuid4()))
     message_type = Column(String(50), default="text")
     timestamp = Column(DateTime, server_default=func.now())
-    branches = Column(JSON, default=list)  # Store branches as JSON array
+    branches = Column(JSON, default=list)
+    
+    # Add these new fields
+    content = Column(Text, nullable=True)  # Unified content field
+    role = Column(String(20), nullable=True)  # user or assistant
+    sender_id = Column(String(36), nullable=True)  # Can be user_id or "AI"
     
     # Relationships
     chat = relationship("Chat", back_populates="messages")
+    user = relationship("User", foreign_keys=[user_id], backref="sent_messages")
 

@@ -1,20 +1,18 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
-
-from app.db.db import Chat, Conversation
-from app.models.models import BranchCreate, QAPair, ChatContent
-from app.constants import ChatType, ErrorMessages
+import json
+from sqlalchemy import select
+from app.db.db import Chat, Conversation, Message
+from app.models.models import BranchCreate
 from app.dal.chat_dal import ChatDAL
 from app.dal.message_dal import MessageDAL
 
 class BranchDAL:
-    def __init__(self, db_session: AsyncSession, mongodb_session=None):
+    def __init__(self, db_session: Session):
         self.db_session = db_session
-        self.mongodb_session = mongodb_session
-        self.chat_dal = ChatDAL(db_session, mongodb_session)
-        self.message_dal = MessageDAL(db_session, mongodb_session)
+        self.chat_dal = ChatDAL(db_session)
+        self.message_dal = MessageDAL(db_session)
     
     async def create_branch(self, branch: BranchCreate, account_id: str) -> Optional[Chat]:
         """Create a new branch from a specific message."""
@@ -33,15 +31,16 @@ class BranchDAL:
         
         # Create a new chat for the branch
         db_chat = Chat(
-            chat_id=str(uuid.uuid4()),
+            id=str(uuid.uuid4()),
             account_id=account_id,
-            chat_type=ChatType.BRANCH,
+            chat_type="branch",
             name=branch.name
         )
         
         # Create conversation record for the branch
         db_conversation = Conversation(
-            chat_id=db_chat.chat_id,
+            id=str(uuid.uuid4()),
+            chat_id=db_chat.id,
             account_id=account_id,
             name=branch.name,
             parent_chat_id=branch.parent_chat_id,
@@ -50,45 +49,48 @@ class BranchDAL:
         
         self.db_session.add(db_chat)
         self.db_session.add(db_conversation)
-        await self.db_session.commit()
-        await self.db_session.refresh(db_chat)
         
-        # Initialize chat content in MongoDB by copying parent chat content up to the branching point
-        if self.mongodb_session:
-            # Get parent chat content
-            parent_content = await self.mongodb_session.chat_content.find_one({"chat_id": branch.parent_chat_id})
-            
-            if parent_content and parent_content.get("qa_pairs"):
-                # Get messages up to the branching point
-                branch_index = -1
-                for i, pair in enumerate(parent_content["qa_pairs"]):
-                    if pair.get("response_id") == branch.parent_message_id:
-                        branch_index = i
-                        break
+        # Update parent message to add reference to this branch
+        parent_msg = self.db_session.query(Message).filter(
+            Message.chat_id == branch.parent_chat_id,
+            Message.response_id == branch.parent_message_id
+        ).first()
+        
+        if parent_msg:
+            branches = parent_msg.branches or []
+            branches.append(db_chat.id)
+            parent_msg.branches = branches
+        
+        # Copy messages up to the branching point
+        messages = self.db_session.query(Message).filter(
+            Message.chat_id == branch.parent_chat_id
+        ).order_by(Message.timestamp).all()
+        
+        found_branch_point = False
+        for msg in messages:
+            if msg.response_id == branch.parent_message_id:
+                found_branch_point = True
                 
-                if branch_index >= 0:
-                    # Copy messages up to and including the branch point
-                    qa_pairs = parent_content["qa_pairs"][:branch_index + 1]
-                    
-                    # Update the branched message to add reference to this branch
-                    await self.mongodb_session.chat_content.update_one(
-                        {
-                            "chat_id": branch.parent_chat_id,
-                            "qa_pairs.response_id": branch.parent_message_id
-                        },
-                        {
-                            "$push": {"qa_pairs.$.branches": db_chat.chat_id}
-                        }
-                    )
-                    
-                    # Create new chat content document for the branch
-                    branch_content = ChatContent(
-                        chat_id=db_chat.chat_id,
-                        qa_pairs=[QAPair(**pair) for pair in qa_pairs]
-                    )
-                    
-                    await self.mongodb_session.chat_content.insert_one(branch_content.dict())
-            
+            if found_branch_point:
+                break
+                
+            # Copy this message to the new branch
+            new_message = Message(
+                id=str(uuid.uuid4()),
+                chat_id=db_chat.id,
+                user_id=msg.user_id,
+                question=msg.question,
+                response=msg.response,
+                response_id=str(uuid.uuid4()),  # Generate new response ID
+                message_type=msg.message_type,
+                timestamp=msg.timestamp,
+                branches=[]
+            )
+            self.db_session.add(new_message)
+        
+        self.db_session.commit()
+        self.db_session.refresh(db_chat)
+        
         return db_chat
     
     async def get_branches(self, chat_id: str, account_id: str) -> List[Conversation]:
@@ -105,7 +107,8 @@ class BranchDAL:
             Conversation.deleted == False
         )
         
-        result = await self.db_session.execute(query)
+        # Remove await - standard SQLAlchemy session is not async
+        result = self.db_session.execute(query)
         return result.scalars().all()
     
     async def get_branch_tree(self, chat_id: str, account_id: str) -> dict:
@@ -118,9 +121,9 @@ class BranchDAL:
                 branch_chat = await self.chat_dal.get_chat(branch_conv.chat_id, account_id)
                 if branch_chat:
                     # Recursively get sub-branches
-                    sub_branches = await build_branch_tree(branch_chat.chat_id)
+                    sub_branches = await build_branch_tree(branch_chat.id)
                     branches.append({
-                        "chat_id": branch_chat.chat_id,
+                        "chat_id": branch_chat.id,
                         "name": branch_chat.name,
                         "parent_message_id": branch_conv.parent_message_id,
                         "branches": sub_branches

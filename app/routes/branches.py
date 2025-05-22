@@ -1,3 +1,4 @@
+from app.dal.chat_dal import ChatDAL
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict
@@ -9,35 +10,36 @@ from app.db.connection import get_db
 from app.config import settings
 
 router = APIRouter(
-    prefix=f"{settings.API_V1_STR}/branches",
-    tags=["branches"]
+    prefix="/api/v1/branches",
+    tags=["branches"],
+    responses={404: {"description": "Not found"}},
 )
 
-@router.post("/create", response_model=ChatResponse)
+@router.post("/create-branch", response_model=ChatResponse)
 async def create_branch(
     branch: BranchCreate,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new branch from a specific message in a chat."""
+    """Create a new branch from a specific message."""
     branch_dal = BranchDAL(db)
-    db_branch = await branch_dal.create_branch(branch, current_user.id)
+    new_branch = await branch_dal.create_branch(branch, current_user.id)
     
-    if not db_branch:
+    if not new_branch:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Parent chat or message not found, or you don't have permission"
+            detail="Failed to create branch. Parent chat or message not found."
         )
     
-    return db_branch
+    return new_branch
 
-@router.get("/get-branches", response_model=List[dict])
+@router.get("/{chat_id}", response_model=List[dict])
 async def get_branches(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get all direct branches for a chat."""
+    """Get all branches for a chat."""
     branch_dal = BranchDAL(db)
     branches = await branch_dal.get_branches(chat_id, current_user.id)
     
@@ -58,16 +60,15 @@ async def get_branches(
     
     return result
 
-@router.get("/get-branch-tree", response_model=Dict)
+@router.get("/tree/{chat_id}")
 async def get_branch_tree(
     chat_id: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get the complete tree of all branches for a chat."""
+    """Get complete tree of branches for a chat."""
     branch_dal = BranchDAL(db)
     tree = await branch_dal.get_branch_tree(chat_id, current_user.id)
-    
     return tree
 
 @router.put("/set-active-branch", response_model=dict)

@@ -1,11 +1,16 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from datetime import timedelta
 
 from app.config import settings
 from app.routes import auth, chats, messages, branches, websockets
 from app.services.cache_service import CacheService
 from app.db.db import create_tables
+
+# Import FastAPICache
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +44,14 @@ app.include_router(websockets.router)
 @app.on_event("startup")
 def startup_event():
     create_tables()
+    
+    # Initialize FastAPICache
+    FastAPICache.init(
+        InMemoryBackend(),
+        prefix="fastapi-cache",
+        expire=timedelta(minutes=5),
+    )
+    
     # Rest of your startup code
 
 @app.on_event("shutdown")

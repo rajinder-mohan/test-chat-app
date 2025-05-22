@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
+from sqlalchemy import select, update
 
 from app.db.db import Chat, Conversation, Message
 from app.models.models import ChatCreate, ChatUpdate, QAPair
@@ -48,43 +49,43 @@ class ChatDAL:
             return await self.get_chat(chat_id, account_id)
         
         query = update(Chat).where(
-            Chat.chat_id == chat_id, 
+            Chat.id == chat_id, 
             Chat.account_id == account_id
         ).values(**update_data)
         
-        await self.db_session.execute(query)
-        await self.db_session.commit()
+        self.db_session.execute(query)
+        self.db_session.commit()
         return await self.get_chat(chat_id, account_id)
     
     async def delete_chat(self, chat_id: str, account_id: str) -> bool:
         """Delete a chat."""
-        # Mark conversations as deleted rather than removing them
+        # Mark conversations as deleted
         conv_query = update(Conversation).where(
             Conversation.chat_id == chat_id,
             Conversation.account_id == account_id
         ).values(deleted=True)
         
-        await self.db_session.execute(conv_query)
+        self.db_session.execute(conv_query)
         
         # Update chat to be inactive
         chat_query = update(Chat).where(
-            Chat.chat_id == chat_id,
+            Chat.id == chat_id,
             Chat.account_id == account_id
         ).values(active=False)
         
-        result = await self.db_session.execute(chat_query)
-        await self.db_session.commit()
+        result = self.db_session.execute(chat_query)
+        self.db_session.commit()
         
         return result.rowcount > 0
     
     async def get_all_chats(self, account_id: str) -> List[Chat]:
-        """Get all active chats for a user."""
+        """Get all chats for a user."""
         query = select(Chat).where(
             Chat.account_id == account_id,
             Chat.active == True
         ).order_by(Chat.updated_at.desc())
         
-        result = await self.db_session.execute(query)
+        result = self.db_session.execute(query)
         return result.scalars().all()
     
     async def get_chat_content(self, chat_id: str, account_id: str) -> Optional[List[QAPair]]:

@@ -96,6 +96,9 @@ class BranchCreate(BaseModel):
     parent_chat_id: str
     parent_message_id: str
     name: str
+    
+    class Config:
+        from_attributes = True
 
 class BranchResponse(BaseModel):
     chat_id: str
