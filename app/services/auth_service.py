@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
 from typing import Optional
 import json
 from jose import jwt, JWTError
 
 from app.config import settings
-from app.models.models import Token, User, UserCreate
+from app.models.models import Token, User, UserCreate, User as UserSchema
+from app.db.db import User as UserModel
+from app.db.connection import get_db
 from app.utils.security import verify_password, get_password_hash, create_access_token
 
 # In a real app, you'd store this in a database
@@ -14,20 +17,16 @@ USERS_DB = {}
 
 class AuthService:
     @staticmethod
-    async def authenticate_user(username: str, password: str) -> Optional[User]:
-        if username not in USERS_DB:
+    async def authenticate_user(username: str, password: str, db: Session) -> Optional[UserModel]:
+        """Authenticate a user using database"""
+        user = db.query(UserModel).filter(UserModel.username == username).first()
+        if not user:
             return None
         
-        user = USERS_DB[username]
-        if not verify_password(password, user["hashed_password"]):
+        if not verify_password(password, user.hashed_password):
             return None
         
-        return User(
-            id=user["id"],
-            username=user["username"],
-            email=user["email"],
-            is_active=user["is_active"]
-        )
+        return user
     
     @staticmethod
     async def create_user(user_create: UserCreate) -> User:
@@ -71,4 +70,14 @@ class AuthService:
             expires_delta=access_token_expires
         )
         
-        return Token(access_token=access_token, token_type="bearer") 
+        return Token(access_token=access_token, token_type="bearer")
+
+    @staticmethod
+    async def create_access_token_for_user(user: UserModel) -> str:
+        """Create access token for authenticated user"""
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.username},
+            expires_delta=access_token_expires
+        )
+        return access_token 

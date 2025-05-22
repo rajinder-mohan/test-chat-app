@@ -16,13 +16,29 @@ router = APIRouter(
 )
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    """Get an access token for authentication."""
-    token = await AuthService.get_login_token(form_data.username, form_data.password)
-    return token
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """Get an access token using username and password"""
+    # Authenticate user against database
+    print(f"Trying to authenticate user: {form_data.username}")
+    user = await AuthService.authenticate_user(form_data.username, form_data.password, db)
+    print(f"Found user: {user is not None}")
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Create access token
+    access_token = await AuthService.create_access_token_for_user(user)
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/register", response_model=UserResponse)
-def register_user(user_create: UserCreate, db: Session = Depends(get_db)):
+async def register_user(user_create: UserCreate, db: Session = Depends(get_db)):
     """Register a new user."""
     # Check if user with this username already exists
     existing_user = db.query(UserModel).filter(UserModel.username == user_create.username).first()
